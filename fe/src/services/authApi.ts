@@ -48,7 +48,7 @@ export const authApi = api.injectEndpoints({
           console.log("🚀 Starting verifyEmail with token:", token);
 
           const baseUrl =
-            import.meta.env.VITE_API_URL || "http://localhost:3000/api";
+            import.meta.env.VITE_API_URL || "http://localhost:3001/api";
           const url = `${baseUrl}/auth/verify-email/${token}`;
 
           console.log("🔗 Making request to:", url);
@@ -227,34 +227,37 @@ export const authApi = api.injectEndpoints({
       },
       providesTags: ["CurrentUser"],
     }),
-    forgotPassword: builder.mutation<{ message: string },{email: string}>({
-      query: ({email})=>({
-      url: '/auth/forgot-password',
-      method:"POST",
-      body:{email},
-  }), 
-    transformResponse: (res: any)=>{
-      if(res?.status === "success") return {message: res.message || 'OK'}
-      return res;
-    },
-    transformErrorResponse: (res: any) => res.data?.message || 'Send reset link failed',
-  }),
-
-//Reset Password
-  resetPassword:builder.mutation<{message: string}, {token: string; password: string; confirmPassword: string}>({
-    query: ({token, password, confirmPassword})=>({
-      url: '/auth/reset-password',
-      method:"POST",
-      body:{token, password, confirmPassword},
+    forgotPassword: builder.mutation<{ message: string }, { email: string }>({
+      query: ({ email }) => ({
+        url: "/auth/forgot-password",
+        method: "POST",
+        body: { email },
+      }),
+      transformResponse: (res: any) => {
+        if (res?.status === "success") return { message: res.message || "OK" };
+        return res;
+      },
+      transformErrorResponse: (res: any) =>
+        res.data?.message || "Send reset link failed",
     }),
-    transformResponse: (res: any)=>{
-      if(res?.status === "success") return {message:res?.message || "OK"} 
-      return res
-    },
-    transformErrorResponse: (res: any)=> res?.data?.message ||  'Reset password failed',
-  })
 
-
+    //Reset Password
+    resetPassword: builder.mutation<
+      { message: string },
+      { token: string; password: string; confirmPassword: string }
+    >({
+      query: ({ token, password, confirmPassword }) => ({
+        url: "/auth/reset-password",
+        method: "POST",
+        body: { token, password, confirmPassword },
+      }),
+      transformResponse: (res: any) => {
+        if (res?.status === "success") return { message: res?.message || "OK" };
+        return res;
+      },
+      transformErrorResponse: (res: any) =>
+        res?.data?.message || "Reset password failed",
+    }),
   }),
 });
 
@@ -266,7 +269,5 @@ export const {
   useGetCurrentUserQuery,
   useVerifyEmailMutation,
   useForgotPasswordMutation,
-  useResetPasswordMutation
-  
-
+  useResetPasswordMutation,
 } = authApi;

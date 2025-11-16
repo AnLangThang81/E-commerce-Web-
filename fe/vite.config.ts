@@ -33,7 +33,7 @@ export default defineConfig({
     },
   },
   server: {
-    port: 5175, // Sử dụng cổng 5175 mặc định
+    port: 5176, // Sử dụng cổng 5175 mặc định
     strictPort: false, // Cho phép tìm cổng khác nếu 5175 đã được sử dụng
     proxy: {
       // Proxy API requests to avoid CORS issues
