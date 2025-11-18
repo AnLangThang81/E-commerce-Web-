@@ -3,7 +3,7 @@
   "development": {
     "username": "postgres",
     "password": "123456",
-    "database": "websitebanhangmini",
+    "database": "E-commerce mini",
     "host": "localhost",
     "port": 5432,
     "dialect": "postgres",
@@ -12,7 +12,7 @@
   "test": {
     "username": "postgres",
     "password": "123456",
-    "database": "websitebanhangmini_test",
+    "database": "E-commerce mini_test",
     "host": "localhost",
     "port": 5432,
     "dialect": "postgres"
@@ -20,7 +20,7 @@
   "production": {
     "username": "postgres",
     "password": "123456",
-    "database": "websitebanhangmini_production",
+    "database": "E-commerce mini_production",
     "host": "localhost",
     "port": 5432,
     "dialect": "postgres"
