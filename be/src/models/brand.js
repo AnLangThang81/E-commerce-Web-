@@ -39,6 +39,7 @@ const Brand = sequelize.define(
     metaDescription: { type: DataTypes.TEXT, allowNull: true },
     sortOrder: { type: DataTypes.INTEGER, defaultValue: 0 },
   },
+
   {
     tableName: "brands",
     timestamps: true,
