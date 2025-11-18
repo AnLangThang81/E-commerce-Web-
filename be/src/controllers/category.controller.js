@@ -1,6 +1,44 @@
-const { Category, Product, sequelize } = require('../models');
-const { AppError } = require('../middlewares/errorHandler');
-const { Op } = require('sequelize');
+const { Category, Product, sequelize } = require("../models");
+const { AppError } = require("../middlewares/errorHandler");
+const { Op, where } = require("sequelize");
+
+// function check normal name
+function normalizeCategoryName(name) {
+  if (!name) return "";
+  return name
+    .trim()
+    .toLowerCase()
+    .split(/\s+/)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1)) // viết chữ hoa cái đàu
+    .join(" ");
+  //Trong trường hợp này, bạn không cần tách từ (split(/\s+/)) và không cần map. Bạn chỉ cần:
+  //return name.charAt(0).toUpperCase() + name.slice(1);
+}
+
+async function checkCategoryNameUnique(name, id = null) {
+  const nameNormalized = name.trim();
+  // check name empty
+  if (!nameNormalized) throw new Error("Tên không được để trống", 400);
+  // check conditional name
+  const idFilter = id ? { id: { [Op.ne]: id } } : {};
+  // find category in db
+  const existing = await Category.findOne({
+    where: {
+      [Op.and]: [
+        sequelize.where(
+          //convert value db to lower
+          sequelize.fn("LOWER", sequelize.col("name")),
+          nameNormalized.toLowerCase()
+        ),
+        idFilter,
+      ],
+    },
+  });
+  if (existing) {
+    throw new Error("Tên danh mục đã có trong danh sách");
+  }
+  return normalizeCategoryName(name);
+}
 
 // Get all categories
 const getAllCategories = async (req, res, next) => {
@@ -8,8 +46,8 @@ const getAllCategories = async (req, res, next) => {
     // Lấy danh sách danh mục
     const categories = await Category.findAll({
       order: [
-        ['sortOrder', 'ASC'],
-        ['name', 'ASC'],
+        ["sortOrder", "ASC"],
+        ["name", "ASC"],
       ],
     });
 
@@ -41,7 +79,7 @@ const getAllCategories = async (req, res, next) => {
     });
 
     res.status(200).json({
-      status: 'success',
+      status: "success",
       data: categoriesWithCount,
     });
   } catch (error) {
@@ -56,8 +94,8 @@ const getCategoryTree = async (req, res, next) => {
     const allCategories = await Category.findAll({
       where: { isActive: true },
       order: [
-        ['sortOrder', 'ASC'],
-        ['name', 'ASC'],
+        ["sortOrder", "ASC"],
+        ["name", "ASC"],
       ],
     });
 
@@ -87,7 +125,7 @@ const getCategoryTree = async (req, res, next) => {
     });
 
     res.status(200).json({
-      status: 'success',
+      status: "success",
       data: rootCategories,
     });
   } catch (error) {
@@ -103,12 +141,12 @@ const getCategoryById = async (req, res, next) => {
     const category = await Category.findByPk(id, {
       include: [
         {
-          association: 'parent',
-          attributes: ['id', 'name', 'slug'],
+          association: "parent",
+          attributes: ["id", "name", "slug"],
         },
         {
-          association: 'children',
-          attributes: ['id', 'name', 'slug', 'image'],
+          association: "children",
+          attributes: ["id", "name", "slug", "image"],
           where: { isActive: true },
           required: false,
         },
@@ -116,11 +154,11 @@ const getCategoryById = async (req, res, next) => {
     });
 
     if (!category) {
-      throw new AppError('Không tìm thấy danh mục', 404);
+      throw new AppError("Không tìm thấy danh mục", 404);
     }
 
     res.status(200).json({
-      status: 'success',
+      status: "success",
       data: category,
     });
   } catch (error) {
@@ -137,12 +175,12 @@ const getCategoryBySlug = async (req, res, next) => {
       where: { slug },
       include: [
         {
-          association: 'parent',
-          attributes: ['id', 'name', 'slug'],
+          association: "parent",
+          attributes: ["id", "name", "slug"],
         },
         {
-          association: 'children',
-          attributes: ['id', 'name', 'slug', 'image'],
+          association: "children",
+          attributes: ["id", "name", "slug", "image"],
           where: { isActive: true },
           required: false,
         },
@@ -150,11 +188,11 @@ const getCategoryBySlug = async (req, res, next) => {
     });
 
     if (!category) {
-      throw new AppError('Không tìm thấy danh mục', 404);
+      throw new AppError("Không tìm thấy danh mục", 404);
     }
 
     res.status(200).json({
-      status: 'success',
+      status: "success",
       data: category,
     });
   } catch (error) {
@@ -172,13 +210,16 @@ const createCategory = async (req, res, next) => {
     if (parentId) {
       const parentCategory = await Category.findByPk(parentId);
       if (!parentCategory) {
-        throw new AppError('Danh mục cha không tồn tại', 400);
+        throw new AppError("Danh mục cha không tồn tại", 400);
       }
     }
 
+    // check the name normal and check exist name
+    const finalName = await checkCategoryNameUnique(name);
+
     // Create category
     const category = await Category.create({
-      name,
+      name: finalName,
       description,
       image,
       parentId,
@@ -188,7 +229,7 @@ const createCategory = async (req, res, next) => {
     });
 
     res.status(201).json({
-      status: 'success',
+      status: "success",
       data: category,
     });
   } catch (error) {
@@ -206,7 +247,7 @@ const updateCategory = async (req, res, next) => {
     // Find category
     const category = await Category.findByPk(id);
     if (!category) {
-      throw new AppError('Không tìm thấy danh mục', 404);
+      throw new AppError("Không tìm thấy danh mục", 404);
     }
 
     // Check if parent category exists
@@ -214,14 +255,14 @@ const updateCategory = async (req, res, next) => {
       // Check if parent is not the category itself
       if (parentId === id) {
         throw new AppError(
-          'Danh mục không thể là danh mục cha của chính nó',
+          "Danh mục không thể là danh mục cha của chính nó",
           400
         );
       }
 
       const parentCategory = await Category.findByPk(parentId);
       if (!parentCategory) {
-        throw new AppError('Danh mục cha không tồn tại', 400);
+        throw new AppError("Danh mục cha không tồn tại", 400);
       }
 
       // Check if parent is not a child of this category (prevent circular reference)
@@ -231,13 +272,17 @@ const updateCategory = async (req, res, next) => {
 
       const childIds = childCategories.map((child) => child.id);
       if (childIds.includes(parentId)) {
-        throw new AppError('Không thể chọn danh mục con làm danh mục cha', 400);
+        throw new AppError("Không thể chọn danh mục con làm danh mục cha", 400);
       }
     }
-
+    //normal name and check exist name( if only change the name)
+    let finalName = category.name;
+    if (name) {
+      finalName = await checkCategoryNameUnique(name, id);
+    }
     // Update category
     await category.update({
-      name: name !== undefined ? name : category.name,
+      name: finalName,
       description:
         description !== undefined ? description : category.description,
       image: image !== undefined ? image : category.image,
@@ -248,7 +293,7 @@ const updateCategory = async (req, res, next) => {
     });
 
     res.status(200).json({
-      status: 'success',
+      status: "success",
       data: category,
     });
   } catch (error) {
@@ -264,7 +309,7 @@ const deleteCategory = async (req, res, next) => {
     // Find category
     const category = await Category.findByPk(id);
     if (!category) {
-      throw new AppError('Không tìm thấy danh mục', 404);
+      throw new AppError("Không tìm thấy danh mục", 404);
     }
 
     // Check if category has children
@@ -273,14 +318,14 @@ const deleteCategory = async (req, res, next) => {
     });
 
     if (childCategories.length > 0) {
-      throw new AppError('Không thể xóa danh mục có danh mục con', 400);
+      throw new AppError("Không thể xóa danh mục có danh mục con", 400);
     }
 
     // Check if category has products
     const productCount = await Product.count({
       include: [
         {
-          association: 'categories',
+          association: "categories",
           where: { id },
           required: true,
         },
@@ -288,15 +333,15 @@ const deleteCategory = async (req, res, next) => {
     });
 
     if (productCount > 0) {
-      throw new AppError('Không thể xóa danh mục có sản phẩm', 400);
+      throw new AppError("Không thể xóa danh mục có sản phẩm", 400);
     }
 
     // Delete category
     await category.destroy();
 
     res.status(200).json({
-      status: 'success',
-      message: 'Xóa danh mục thành công',
+      status: "success",
+      message: "Xóa danh mục thành công",
     });
   } catch (error) {
     next(error);
@@ -310,14 +355,14 @@ const getProductsByCategory = async (req, res, next) => {
     const {
       page = 1,
       limit = 10,
-      sort = 'createdAt',
-      order = 'DESC',
+      sort = "createdAt",
+      order = "DESC",
     } = req.query;
 
     // Find category
     const category = await Category.findByPk(id);
     if (!category) {
-      throw new AppError('Không tìm thấy danh mục', 404);
+      throw new AppError("Không tìm thấy danh mục", 404);
     }
 
     // Get all child category IDs
@@ -331,7 +376,7 @@ const getProductsByCategory = async (req, res, next) => {
     const { count, rows: products } = await Product.findAndCountAll({
       include: [
         {
-          association: 'categories',
+          association: "categories",
           where: { id: { [Op.in]: categoryIds } },
           through: { attributes: [] },
         },
@@ -343,7 +388,7 @@ const getProductsByCategory = async (req, res, next) => {
     });
 
     res.status(200).json({
-      status: 'success',
+      status: "success",
       data: {
         total: count,
         pages: Math.ceil(count / limit),
@@ -363,7 +408,7 @@ const getFeaturedCategories = async (req, res, next) => {
     const categories = await Category.findAll({
       include: [
         {
-          association: 'products',
+          association: "products",
           where: { featured: true },
           through: { attributes: [] },
           required: true,
@@ -371,8 +416,8 @@ const getFeaturedCategories = async (req, res, next) => {
       ],
       where: { isActive: true },
       order: [
-        ['sortOrder', 'ASC'],
-        ['name', 'ASC'],
+        ["sortOrder", "ASC"],
+        ["name", "ASC"],
       ],
     });
 
@@ -385,19 +430,19 @@ const getFeaturedCategories = async (req, res, next) => {
         },
         limit: 5,
         order: [
-          ['sortOrder', 'ASC'],
-          ['name', 'ASC'],
+          ["sortOrder", "ASC"],
+          ["name", "ASC"],
         ],
       });
 
       return res.status(200).json({
-        status: 'success',
+        status: "success",
         data: topCategories,
       });
     }
 
     res.status(200).json({
-      status: 'success',
+      status: "success",
       data: categories,
     });
   } catch (error) {

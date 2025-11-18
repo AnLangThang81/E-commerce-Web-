@@ -1,51 +1,52 @@
-const { DataTypes } = require('sequelize');
-const slugify = require('slugify');
-const sequelize = require('../config/sequelize');
+const { DataTypes } = require("sequelize");
+const slugify = require("slugify");
+const sequelize = require("../config/sequelize");
 
 const Category = sequelize.define(
-  'Category',
+  "Category",
   {
     id: {
       type: DataTypes.UUID,
       defaultValue: DataTypes.UUIDV4,
-      primaryKey: true
+      primaryKey: true,
     },
     name: {
       type: DataTypes.STRING,
-      allowNull: false
+      allowNull: false,
+      unique: true,
     },
     slug: {
       type: DataTypes.STRING,
       allowNull: false,
-      unique: true
+      unique: true,
     },
     description: {
       type: DataTypes.TEXT,
-      allowNull: true
+      allowNull: true,
     },
     image: {
       type: DataTypes.STRING,
-      allowNull: true
+      allowNull: true,
     },
     parentId: {
       type: DataTypes.UUID,
-      allowNull: true
+      allowNull: true,
     },
     level: {
       type: DataTypes.INTEGER,
-      defaultValue: 1
+      defaultValue: 1,
     },
     isActive: {
       type: DataTypes.BOOLEAN,
-      defaultValue: true
+      defaultValue: true,
     },
     sortOrder: {
       type: DataTypes.INTEGER,
-      defaultValue: 0
+      defaultValue: 0,
     },
   },
   {
-    tableName: 'categories',
+    tableName: "categories",
     timestamps: true,
     hooks: {
       beforeValidate: (category) => {
@@ -55,7 +56,7 @@ const Category = sequelize.define(
             strict: true,
           });
         }
-      }
+      },
     },
   }
 );
