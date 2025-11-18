@@ -279,9 +279,9 @@ const getProductById = async (req, res, next) => {
     // Construct image URLs for productImages
     const productImagesWithUrls = productJson.productImages
       ? productJson.productImages.map((image) => ({
-        ...image,
-        url: `/uploads/${image.filePath.replace(/\\/g, "/")}`,
-      }))
+          ...image,
+          url: `/uploads/${image.filePath.replace(/\\/g, "/")}`,
+        }))
       : [];
 
     // Also fix images array in product data
@@ -1118,12 +1118,16 @@ const getNewArrivals = async (req, res, next) => {
           association: "reviews",
           attributes: ["rating"],
         },
+        {
+          association: "variants",
+          required: false,
+        },
       ],
       limit: parseInt(limit),
       order: [["createdAt", "DESC"]],
     });
 
-    // Process products to add ratings
+    // Process products to add ratings and handle variant prices
     const products = productsRaw.map((product) => {
       const productJson = product.toJSON();
 
@@ -1144,11 +1148,25 @@ const getNewArrivals = async (req, res, next) => {
         ratings.count = productJson.reviews.length;
       }
 
+      // Use variant price if available, otherwise use product price
+      let displayPrice = parseFloat(productJson.price) || 0;
+      let compareAtPrice = parseFloat(productJson.compareAtPrice) || null;
+
+      if (productJson.variants && productJson.variants.length > 0) {
+        // Sort variants by price (ascending) to get the lowest price first
+        const sortedVariants = productJson.variants.sort(
+          (a, b) => parseFloat(a.price) - parseFloat(b.price)
+        );
+        displayPrice = parseFloat(sortedVariants[0].price) || displayPrice;
+      }
+
       // Add ratings and remove reviews from response
       delete productJson.reviews;
 
       return {
         ...productJson,
+        price: displayPrice,
+        compareAtPrice,
         ratings,
       };
     });
@@ -1188,13 +1206,13 @@ const getBestSellers = async (req, res, next) => {
     // Get best selling products based on order items
     const bestSellers = await sequelize.query(
       `
-      SELECT 
-        p.id, 
-        p.name, 
-        p.slug, 
-        p.price, 
-        p.compare_at_price, 
-        p.thumbnail, 
+      SELECT
+        p.id,
+        p.name,
+        p.slug,
+        p.price,
+        p.compare_at_price,
+        p.thumbnail,
         p.in_stock,
         p.stock_quantity,
         p.featured,
@@ -1224,12 +1242,20 @@ const getBestSellers = async (req, res, next) => {
     const productIds = bestSellers.map((product) => product.id);
 
     // Get full product details
-    const products = await Product.findAll({
+    const productsRaw = await Product.findAll({
       where: { id: { [Op.in]: productIds } },
       include: [
         {
           association: "categories",
           through: { attributes: [] },
+        },
+        {
+          association: "reviews",
+          attributes: ["rating"],
+        },
+        {
+          association: "variants",
+          required: false,
         },
       ],
       order: [
@@ -1241,6 +1267,50 @@ const getBestSellers = async (req, res, next) => {
           ),
         ],
       ],
+    });
+
+    // Process products to add ratings and handle variant prices
+    const products = productsRaw.map((product) => {
+      const productJson = product.toJSON();
+
+      // Calculate average rating
+      const ratings = {
+        average: 0,
+        count: 0,
+      };
+
+      if (productJson.reviews && productJson.reviews.length > 0) {
+        const totalRating = productJson.reviews.reduce(
+          (sum, review) => sum + review.rating,
+          0
+        );
+        ratings.average = parseFloat(
+          (totalRating / productJson.reviews.length).toFixed(1)
+        );
+        ratings.count = productJson.reviews.length;
+      }
+
+      // Use variant price if available, otherwise use product price
+      let displayPrice = parseFloat(productJson.price) || 0;
+      let compareAtPrice = parseFloat(productJson.compareAtPrice) || null;
+
+      if (productJson.variants && productJson.variants.length > 0) {
+        // Sort variants by price (ascending) to get the lowest price first
+        const sortedVariants = productJson.variants.sort(
+          (a, b) => parseFloat(a.price) - parseFloat(b.price)
+        );
+        displayPrice = parseFloat(sortedVariants[0].price) || displayPrice;
+      }
+
+      // Add ratings and remove reviews from response
+      delete productJson.reviews;
+
+      return {
+        ...productJson,
+        price: displayPrice,
+        compareAtPrice,
+        ratings,
+      };
     });
 
     res.status(200).json({
