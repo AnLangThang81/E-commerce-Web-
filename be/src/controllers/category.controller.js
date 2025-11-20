@@ -1,6 +1,6 @@
 const { Category, Product, sequelize } = require("../models");
 const { AppError } = require("../middlewares/errorHandler");
-const { Op, where } = require("sequelize");
+const { Op } = require("sequelize");
 
 // function check normal name
 function normalizeCategoryName(name) {
