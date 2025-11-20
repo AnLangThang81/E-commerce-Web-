@@ -1,8 +1,8 @@
-const { DataTypes, STRING } = require("sequelize");
+const { DataTypes } = require("sequelize");
 const slugify = require("slugify");
 const sequelize = require("../config/sequelize");
 
-const Brand = sequelize.define(
+const Brand = sequelize.define( 
   "Brand",
   {
     id: {
@@ -28,16 +28,17 @@ const Brand = sequelize.define(
       allowNull: true,
     },
     address: {
-      DataTypes: DataTypes.TEXT,
+      type: DataTypes.TEXT,
       allowNull: true,
     },
     isActive: {
       type: DataTypes.BOOLEAN,
       defaultValue: true,
+      field: "is_active",
     },
-    metaTitle: { type: DataTypes.STRING, allowNull: true },
-    metaDescription: { type: DataTypes.TEXT, allowNull: true },
-    sortOrder: { type: DataTypes.INTEGER, defaultValue: 0 },
+    metaTitle: { type: DataTypes.STRING, allowNull: true, field: 'meta_title' },
+    metaDescription: { type: DataTypes.TEXT, allowNull: true, field: 'meta_description' },
+    sortOrder: { type: DataTypes.INTEGER, defaultValue: 0, field: 'sort_order' },
   },
 
   {
@@ -46,8 +47,6 @@ const Brand = sequelize.define(
     indexes: [
       { unique: true, fields: ["name"] },
       { unique: true, fields: ["slug"] },
-      { fields: ["isActive"] },
-      { fields: ["sortOrder"] },
     ],
   }
 );
