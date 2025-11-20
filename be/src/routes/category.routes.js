@@ -1,10 +1,10 @@
-const express = require('express');
+const express = require("express");
 const router = express.Router();
-const categoryController = require('../controllers/category.controller');
-const { validateRequest } = require('../middlewares/validateRequest');
-const { categorySchema } = require('../validators/category.validator');
-const { authenticate } = require('../middlewares/authenticate');
-const { authorize } = require('../middlewares/authorize');
+const categoryController = require("../controllers/category.controller");
+const { validateRequest } = require("../middlewares/validateRequest");
+const { categorySchema } = require("../validators/category.validator");
+const { authenticate } = require("../middlewares/authenticate");
+const { authorize } = require("../middlewares/authorize");
 
 /**
  * @swagger
@@ -93,7 +93,7 @@ const { authorize } = require('../middlewares/authorize');
  *       200:
  *         description: List of categories
  */
-router.get('/', categoryController.getAllCategories);
+router.get("/", categoryController.getAllCategories);
 
 /**
  * @swagger
@@ -105,7 +105,7 @@ router.get('/', categoryController.getAllCategories);
  *       200:
  *         description: Category tree
  */
-router.get('/tree', categoryController.getCategoryTree);
+router.get("/tree", categoryController.getCategoryTree);
 
 /**
  * @swagger
@@ -117,7 +117,7 @@ router.get('/tree', categoryController.getCategoryTree);
  *       200:
  *         description: List of featured categories
  */
-router.get('/featured', categoryController.getFeaturedCategories);
+router.get("/featured", categoryController.getFeaturedCategories);
 
 /**
  * @swagger
@@ -138,7 +138,7 @@ router.get('/featured', categoryController.getFeaturedCategories);
  *       404:
  *         description: Category not found
  */
-router.get('/slug/:slug', categoryController.getCategoryBySlug);
+router.get("/slug/:slug", categoryController.getCategoryBySlug);
 
 /**
  * @swagger
@@ -184,7 +184,7 @@ router.get('/slug/:slug', categoryController.getCategoryBySlug);
  *       404:
  *         description: Category not found
  */
-router.get('/:id/products', categoryController.getProductsByCategory);
+router.get("/:id/products", categoryController.getProductsByCategory);
 
 /**
  * @swagger
@@ -205,7 +205,7 @@ router.get('/:id/products', categoryController.getProductsByCategory);
  *       404:
  *         description: Category not found
  */
-router.get('/:id', categoryController.getCategoryById);
+router.get("/:id", categoryController.getCategoryById);
 
 // Admin routes
 
@@ -251,9 +251,9 @@ router.get('/:id', categoryController.getCategoryById);
  *         description: Not authorized
  */
 router.post(
-  '/',
+  "/",
   authenticate,
-  authorize('admin'),
+  authorize("admin"),
   validateRequest(categorySchema),
   categoryController.createCategory
 );
@@ -305,9 +305,9 @@ router.post(
  *         description: Category not found
  */
 router.put(
-  '/:id',
+  "/:id",
   authenticate,
-  authorize('admin'),
+  authorize("admin"),
   validateRequest(categorySchema),
   categoryController.updateCategory
 );
@@ -338,9 +338,9 @@ router.put(
  *         description: Category not found
  */
 router.delete(
-  '/:id',
+  "/:id",
   authenticate,
-  authorize('admin'),
+  authorize("admin"),
   categoryController.deleteCategory
 );
 
