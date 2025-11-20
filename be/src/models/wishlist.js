@@ -1,8 +1,8 @@
-const { DataTypes } = require('sequelize');
-const sequelize = require('../config/sequelize');
+const { DataTypes } = require("sequelize");
+const sequelize = require("../config/sequelize");
 
 const Wishlist = sequelize.define(
-  'Wishlist',
+  "Wishlist",
   {
     id: {
       type: DataTypes.UUID,
@@ -19,15 +19,18 @@ const Wishlist = sequelize.define(
     },
   },
   {
-    tableName: 'wishlists',
+    tableName: "wishlists",
     timestamps: true,
     indexes: [
       {
         unique: true,
-        fields: ['user_id', 'product_id'],
+        fields: ["user_id", "product_id"],
       },
     ],
   }
+  // {
+  //   underscored: true, // Sequelize sẽ tự map camelCase sang snake_case
+  // }
 );
 
 module.exports = Wishlist;

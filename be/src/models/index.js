@@ -3,6 +3,7 @@ const sequelize = require("../config/sequelize");
 const User = require("./user");
 const Address = require("./address");
 const Category = require("./category");
+const Brand = require("./brand");
 const Product = require("./product");
 const ProductCategory = require("./productCategory");
 const ProductAttribute = require("./productAttribute");
@@ -44,6 +45,14 @@ Category.belongsToMany(Product, {
   as: "products",
 });
 
+// Product - Brand relationship (many to one)
+Product.belongsTo(Brand, {
+  foreignKey: "brand_id",
+  as: "brands",
+});
+Brand.hasMany(Product, {
+  foreignKey: "brand_id",
+});
 // Product - ProductAttribute relationship
 Product.hasMany(ProductAttribute, {
   foreignKey: "productId",
@@ -218,4 +227,5 @@ module.exports = {
   AttributeValue,
   ProductAttributeGroup,
   Image,
+  Brand,
 };
