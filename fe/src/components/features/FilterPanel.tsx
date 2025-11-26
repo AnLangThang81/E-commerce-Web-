@@ -1,6 +1,6 @@
-import { useState } from 'react';
-import Button from '@/components/common/Button';
-import { formatPrice } from '@/utils/format';
+import { useEffect, useState } from "react";
+import Button from "@/components/common/Button";
+import { formatPrice } from "@/utils/format";
 
 interface PriceRange {
   min: number;
@@ -10,6 +10,7 @@ interface PriceRange {
 interface FilterOption {
   id: string;
   name: string;
+  children?: FilterOption[];
 }
 
 interface FilterGroup {
@@ -33,6 +34,31 @@ interface FilterPanelProps {
   onCloseMobile?: () => void;
 }
 
+type FilterOptionState = Record<string, boolean>;
+
+const getDefaultExpandedGroups = (
+  groups: FilterGroup[]
+): Record<string, boolean> =>
+  groups.reduce((acc, group) => ({ ...acc, [group.id]: true }), {});
+
+const getDefaultExpandedOptions = (
+  groups: FilterGroup[]
+): FilterOptionState => {
+  const state: FilterOptionState = {};
+
+  const visit = (options?: FilterOption[]) => {
+    options?.forEach((option) => {
+      if (option.children?.length) {
+        state[option.id] = true;
+        visit(option.children);
+      }
+    });
+  };
+
+  groups.forEach((group) => visit(group.options));
+  return state;
+};
+
 const FilterPanel: React.FC<FilterPanelProps> = ({
   priceRange,
   onPriceRangeChange,
@@ -46,12 +72,29 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
   const [localPriceRange, setLocalPriceRange] =
     useState<PriceRange>(priceRange);
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>(
-    filterGroups.reduce((acc, group) => ({ ...acc, [group.id]: true }), {})
+    () => getDefaultExpandedGroups(filterGroups)
   );
+  const [expandedOptions, setExpandedOptions] = useState<FilterOptionState>(
+    () => getDefaultExpandedOptions(filterGroups)
+  );
+
+  useEffect(() => {
+    setLocalPriceRange(priceRange);
+  }, [priceRange]);
+
+  useEffect(() => {
+    if (!filterGroups.length) return;
+    setExpandedGroups((prev) =>
+      Object.keys(prev).length ? prev : getDefaultExpandedGroups(filterGroups)
+    );
+    setExpandedOptions((prev) =>
+      Object.keys(prev).length ? prev : getDefaultExpandedOptions(filterGroups)
+    );
+  }, [filterGroups]);
 
   const handlePriceInputChange = (
     e: React.ChangeEvent<HTMLInputElement>,
-    type: 'min' | 'max'
+    type: "min" | "max"
   ) => {
     const value = parseInt(e.target.value) || 0;
     setLocalPriceRange((prev) => ({ ...prev, [type]: value }));
@@ -70,10 +113,56 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
 
   const baseClasses = `bg-white dark:bg-neutral-800 rounded-lg shadow-sm p-5 ${
     isMobile
-      ? 'fixed inset-0 z-50 overflow-auto'
-      : 'sticky top-24 max-h-[calc(100vh-120px)] overflow-auto'
+      ? "fixed inset-0 z-50 overflow-auto"
+      : "sticky top-24 max-h-[calc(100vh-120px)] overflow-auto"
   }`;
 
+  const renderOptions = (
+    options: FilterOption[],
+    groupId: string,
+    level = 0
+  ) => {
+    return options.map((option) => {
+      const hasChildren = option.children && option.children.length > 0;
+      const isExpanded = expandedOptions[option.id] || false;
+      const isSelected = selectedFilters[groupId]?.includes(option.id) || false;
+      return (
+        <div
+          key={option.id}
+          style={{ marginLeft: level * 16 }} // mỗi cấp thụt 16px
+          className="mb-1"
+        >
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={isSelected}
+              onChange={(e) =>
+                onFilterChange(groupId, option.id, e.target.checked)
+              }
+            />
+            <span>{option.name}</span>
+            {hasChildren && (
+              <button
+                onClick={() =>
+                  setExpandedOptions((prev) => ({
+                    ...prev,
+                    [option.id]: !prev[option.id],
+                  }))
+                }
+                className="text-sm text-neutral-500 ml-2"
+              >
+                {isExpanded ? "▲" : "▼"}
+              </button>
+            )}
+          </div>
+
+          {hasChildren &&
+            isExpanded &&
+            renderOptions(option.children!, groupId, level + 1)}
+        </div>
+      );
+    });
+  };
   return (
     <div className={baseClasses}>
       {isMobile && (
@@ -114,12 +203,12 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
           {/* Quick Price Presets */}
           <div className="grid grid-cols-2 gap-2 mb-4">
             {[
-              { label: 'Dưới 100K', min: 0, max: 100000 },
-              { label: '100K - 500K', min: 100000, max: 500000 },
-              { label: '500K - 1M', min: 500000, max: 1000000 },
-              { label: '1M - 5M', min: 1000000, max: 5000000 },
-              { label: '5M - 10M', min: 5000000, max: 10000000 },
-              { label: 'Trên 10M', min: 10000000, max: 100000000 },
+              { label: "Dưới 100K", min: 0, max: 100000 },
+              { label: "100K - 500K", min: 100000, max: 500000 },
+              { label: "500K - 1M", min: 500000, max: 1000000 },
+              { label: "1M - 5M", min: 1000000, max: 5000000 },
+              { label: "5M - 10M", min: 5000000, max: 10000000 },
+              { label: "Trên 10M", min: 10000000, max: 100000000 },
             ].map((preset) => (
               <button
                 key={preset.label}
@@ -129,8 +218,8 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
                 className={`px-2 py-1 text-xs rounded border transition-colors ${
                   localPriceRange.min === preset.min &&
                   localPriceRange.max === preset.max
-                    ? 'bg-primary-500 text-white border-primary-500'
-                    : 'bg-white dark:bg-neutral-800 border-neutral-300 dark:border-neutral-600 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-700'
+                    ? "bg-primary-500 text-white border-primary-500"
+                    : "bg-white dark:bg-neutral-800 border-neutral-300 dark:border-neutral-600 text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-700"
                 }`}
               >
                 {preset.label}
@@ -146,7 +235,7 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
               <input
                 type="number"
                 value={localPriceRange.min}
-                onChange={(e) => handlePriceInputChange(e, 'min')}
+                onChange={(e) => handlePriceInputChange(e, "min")}
                 className="w-full px-3 py-2 border border-neutral-300 dark:border-neutral-600 rounded-md bg-white dark:bg-neutral-800 text-neutral-800 dark:text-neutral-200"
                 min={0}
                 placeholder="0"
@@ -159,7 +248,7 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
               <input
                 type="number"
                 value={localPriceRange.max}
-                onChange={(e) => handlePriceInputChange(e, 'max')}
+                onChange={(e) => handlePriceInputChange(e, "max")}
                 className="w-full px-3 py-2 border border-neutral-300 dark:border-neutral-600 rounded-md bg-white dark:bg-neutral-800 text-neutral-800 dark:text-neutral-200"
                 min={0}
                 placeholder="10000000"
@@ -198,7 +287,7 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
               <svg
                 xmlns="http://www.w3.org/2000/svg"
                 className={`h-5 w-5 text-neutral-500 transition-transform ${
-                  expandedGroups[group.id] ? 'transform rotate-180' : ''
+                  expandedGroups[group.id] ? "transform rotate-180" : ""
                 }`}
                 fill="none"
                 viewBox="0 0 24 24"
@@ -213,7 +302,7 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
               </svg>
             </button>
 
-            {expandedGroups[group.id] && (
+            {/* {expandedGroups[group.id] && (
               <div className="space-y-2 ml-1">
                 {group.options.map((option) => {
                   const isSelected =
@@ -238,6 +327,12 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
                     </div>
                   );
                 })}
+               
+              </div>
+            )} */}
+            {expandedGroups[group.id] && (
+              <div className="space-y-2 flex flex-col">
+                {renderOptions(group.options, group.id)}
               </div>
             )}
           </div>

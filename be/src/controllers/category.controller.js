@@ -354,7 +354,7 @@ const getProductsByCategory = async (req, res, next) => {
     const { id } = req.params;
     const {
       page = 1,
-      limit = 10,
+      limit = 5,
       sort = "createdAt",
       order = "DESC",
     } = req.query;
