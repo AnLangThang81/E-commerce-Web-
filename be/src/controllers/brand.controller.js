@@ -1,6 +1,6 @@
 const { Op } = require("sequelize");
 
-const { sequelize, Brand } = require("../models");
+const { sequelize, Brand, Product } = require("../models");
 const { AppError } = require("../middlewares/errorHandler");
 
 // function normal name
@@ -32,7 +32,7 @@ async function checkBrandNameUnique(name, id = null) {
     },
   });
   if (existing) {
-    throw new Error("Tên thương hiệu đã có trong danh sách", 400);
+    throw new AppError("Tên thương hiệu đã có trong danh sách", 400);
   }
   return normallizeBrandsName(name);
 }
@@ -117,15 +117,37 @@ const UpdateBrand = async (req, res, next) => {
     next(error);
   }
 };
-
-// delete
+// get all brands
+// const getAllBrands = async (req, res, next) => {
+//   const brands = await Brand.findAll({
+//     order: [
+//       ["sortOrder", "ASC"],
+//       ["name", "ASC"],
+//     ],
+//   });
+//   // lất số lượng sản phẩm cho mỗi thương hiệu
+//   const BrandCounts = await sequelize.query(
+//     `SELECT brand_id, COUNT (DISTINCT product_id ) as product_count FROM product_brands GROUP BY brand_id`,
+//     { type: sequelize.QueryType.SELECT }
+//   );
+//   // Tạo map từ brandid đến product_count
+// };
+// delete brands
 const deleteBrands = async (req, res, next) => {
   try {
     const { id } = req.params;
     const brand = await Brand.findByPk(id);
-    if (!brand) throw new AppError("Không tìm thấy thương hiệu", 404);
+    if (!brand) {
+      throw new AppError("Không tìm thấy thương hiệu", 404);
+    }
+    const ProductCount = await Product.count({
+      where: { brandId: id },
+    });
+    if (ProductCount > 0) {
+      throw new AppError("Brand có sản phẩm, không thể xóa", 400);
+    }
     await brand.destroy();
-    res.status(204).json({
+    res.status(200).json({
       status: "success",
       message: "Đã xóa thương hiệu thành công",
     });

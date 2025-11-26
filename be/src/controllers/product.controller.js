@@ -19,6 +19,7 @@ const getAllProducts = async (req, res, next) => {
       sort = "createdAt",
       order = "DESC",
       category,
+
       search,
       minPrice,
       maxPrice,

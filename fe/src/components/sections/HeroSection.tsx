@@ -190,7 +190,6 @@ const HeroSection: React.FC<HeroSectionProps> = ({
                   {t('homepage.hero.buttons.shopNow')}
                 </div>
               </button>
-
               <button
                 className="group relative px-8 py-4 bg-white/10 backdrop-blur-md border border-white/30 text-white font-semibold text-base rounded-xl hover:bg-white/20 hover:border-white/50 transition-all duration-300 transform hover:scale-105 overflow-hidden"
                 onClick={handleBrowseCategories}

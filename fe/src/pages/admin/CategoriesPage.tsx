@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import {
-  Table,
   Button,
   Modal,
   Form,
@@ -15,6 +14,7 @@ import {
   Image,
   Card,
   Typography,
+  Collapse,
 } from 'antd';
 import {
   PlusOutlined,
@@ -47,6 +47,7 @@ const CategoriesPage: React.FC = () => {
   const [form] = Form.useForm();
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
+  const [expandedKeys, setExpandedKeys] = useState<string[]>([]);
 
   // API hooks
   const {
@@ -137,112 +138,146 @@ const CategoriesPage: React.FC = () => {
     });
   };
 
-  // Table columns
-  const columns = [
-    {
-      title: 'Hình ảnh',
-      dataIndex: 'image',
-      key: 'image',
-      width: 80,
-      render: (image: string, record: Category) =>
-        image ? (
-          <Image
-            src={image}
-            alt={record.name}
-            width={50}
-            height={50}
-            style={{ objectFit: 'cover', borderRadius: 4 }}
-            fallback="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMIAAADDCAYAAADQvc6UAAABRWlDQ1BJQ0MgUHJvZmlsZQAAKJFjYGASSSwoyGFhYGDIzSspCnJ3UoiIjFJgf8LAwSDCIMogwMCcmFxc4BgQ4ANUwgCjUcG3awyMIPqyLsis7PPOq3QdDFcvjV3jOD1boQVTPQrgSkktTgbSf4A4LbmgqISBgTEFyFYuLykAsTuAbJEioKOA7DkgdjqEvQHEToKwj4DVhAQ5A9k3gGyB5IxEoBmML4BsnSQk8XQkNtReEOBxcfXxUQg1Mjc0dyHgXNJBSWpFCYh2zi+oLMpMzyhRcASGUqqCZ16yno6CkYGRAQMDKMwhqj/fAIcloxgHQqxAjIHBEugw5sUIsSQpBobtQPdLciLEVJYzMPBHMDBsayhILEqEO4DxG0txmrERhM29nYGBddr//5/DGRjYNRkY/l7////39v///y4Dmn+LgeHANwDrkl1AuO+pmgAAADhlWElmTU0AKgAAAAgAAYdpAAQAAAABAAAAGgAAAAAAAqACAAQAAAABAAAAwqADAAQAAAABAAAAwwAAAAD9b/HnAAAHlklEQVR4Ae3dP3Ik1RnG4W+FgYxN"
-          />
-        ) : (
-          <div className="w-12 h-12 bg-gray-100 rounded flex items-center justify-center">
-            <FolderOutlined className="text-gray-400" />
-          </div>
-        ),
-    },
-    {
-      title: 'Tên danh mục',
-      dataIndex: 'name',
-      key: 'name',
-      render: (name: string, record: Category) => (
-        <div>
-          <div className="font-medium">{name}</div>
-          <div className="text-sm text-gray-500">{record.slug}</div>
-        </div>
-      ),
-    },
-    {
-      title: 'Mô tả',
-      dataIndex: 'description',
-      key: 'description',
-      render: (description: string) =>
-        description ? (
-          <div className="max-w-xs truncate" title={description}>
-            {description}
-          </div>
-        ) : (
-          <span className="text-gray-400">—</span>
-        ),
-    },
-    {
-      title: 'Danh mục cha',
-      dataIndex: 'parentId',
-      key: 'parentId',
-      render: (parentId: string | null) => {
-        if (!parentId) {
-          return <Tag color="green">Danh mục gốc</Tag>;
+  // Build hierarchical categories
+  const buildCategoryTree = (categories: Category[]): (Category & { children: Category[] })[] => {
+    const categoryMap = new Map<string, Category & { children: Category[] }>();
+    const rootCategories: (Category & { children: Category[] })[] = [];
+
+    // Initialize map
+    categories.forEach(cat => {
+      categoryMap.set(cat.id, { ...cat, children: [] });
+    });
+
+    // Build tree
+    categories.forEach(cat => {
+      if (cat.parentId) {
+        const parent = categoryMap.get(cat.parentId);
+        if (parent) {
+          parent.children.push(categoryMap.get(cat.id)!);
         }
-        const parent = categories.find((cat) => cat.id === parentId);
-        return parent ? (
-          <Tag color="blue">{parent.name}</Tag>
-        ) : (
-          <span className="text-gray-400">—</span>
-        );
-      },
-    },
-    {
-      title: 'Trạng thái',
-      dataIndex: 'isActive',
-      key: 'isActive',
-      render: (isActive: boolean) => (
-        <Tag color={isActive ? 'success' : 'error'}>
-          {isActive ? 'Hoạt động' : 'Ẩn'}
-        </Tag>
-      ),
-    },
-    {
-      title: 'Thứ tự',
-      dataIndex: 'sortOrder',
-      key: 'sortOrder',
-      width: 80,
-      render: (sortOrder: number) => sortOrder || 0,
-    },
-    {
-      title: 'Hành động',
-      key: 'actions',
-      width: 120,
-      render: (_, record: Category) => (
-        <Space>
-          <Button
-            type="link"
-            icon={<EditOutlined />}
-            onClick={() => handleEdit(record)}
-            size="small"
-          />
-          <Popconfirm
-            title="Xóa danh mục"
-            description="Bạn có chắc chắn muốn xóa danh mục này?"
-            onConfirm={() => handleDelete(record.id)}
-            okText="Xóa"
-            cancelText="Hủy"
-            okButtonProps={{ danger: true }}
-          >
-            <Button type="link" icon={<DeleteOutlined />} danger size="small" />
-          </Popconfirm>
-        </Space>
-      ),
-    },
-  ];
+      } else {
+        rootCategories.push(categoryMap.get(cat.id)!);
+      }
+    });
+
+    return rootCategories;
+  };
+
+  const categoryTree = buildCategoryTree(categories);
+
+  // Render category item
+  const renderCategoryItem = (category: Category & { children: Category[] }) => (
+    <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700 last:border-b-0">
+      <div className="flex items-center space-x-4">
+        <div className="flex-shrink-0">
+          {category.image ? (
+            <Image
+              src={category.image}
+              alt={category.name}
+              width={40}
+              height={40}
+              style={{ objectFit: 'cover', borderRadius: 4 }}
+              fallback="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMIAAADDCAYAAADQvc6UAAABRWlDQ1BJQ0MgUHJvZmlsZQAAKJFjYGASSSwoyGFhYGDIzSspCnJ3UoiIjFJgf8LAwSDCIMogwMCcmFxc4BgQ4ANUwgCjUcG3awyMIPqyLsis7PPOq3QdDFcvjV3jOD1boQVTPQrgSkktTgbSf4A4LbmgqISBgTEFyFYuLykAsTuAbJEioKOA7DkgdjqEvQHEToKwj4DVhAQ5A9k3gGyB5IxEoBmML4BsnSQk8XQkNtReEOBxcfXxUQg1Mjc0dyHgXNJBSWpFCYh2zi+oLMpMzyhRcASGUqqCZ16yno6CkYGRAQMDKMwhqj/fAIcloxgHQqxAjIHBEugw5sUIsSQpBobtQPdLciLEVJYzMPBHMDBsayhILEqEO4DxG0txmrERhM29nYGBddr//5/DGRjYNRkY/l7////39v///y4Dmn+LgeHANwDrkl1AuO+pmgAAADhlWElmTU0AKgAAAAgAAYdpAAQAAAABAAAAGgAAAAAAAqACAAQAAAABAAAAwqADAAQAAAABAAAAwwAAAAD9b/HnAAAHlklEQVR4Ae3dP3Ik1RnG4W+FgYxN"
+            />
+          ) : (
+            <div className="w-10 h-10 bg-gray-100 rounded flex items-center justify-center">
+              <FolderOutlined className="text-gray-400" />
+            </div>
+          )}
+        </div>
+        <div className="flex-1">
+          <div className="font-medium text-gray-900 dark:text-white">{category.name}</div>
+          <div className="text-sm text-gray-500">{category.slug}</div>
+          {category.description && (
+            <div className="text-sm text-gray-600 dark:text-gray-400 mt-1 max-w-md truncate" title={category.description}>
+              {category.description}
+            </div>
+          )}
+        </div>
+        <div className="flex items-center space-x-2">
+          <Tag color={category.isActive ? 'success' : 'error'}>
+            {category.isActive ? 'Hoạt động' : 'Ẩn'}
+          </Tag>
+          <span className="text-sm text-gray-500">Thứ tự: {category.sortOrder || 0}</span>
+        </div>
+      </div>
+      <div className="flex items-center space-x-2">
+        <Button
+          type="link"
+          icon={<EditOutlined />}
+          onClick={() => handleEdit(category)}
+          size="small"
+        />
+        <Popconfirm
+          title="Xóa danh mục"
+          description="Bạn có chắc chắn muốn xóa danh mục này?"
+          onConfirm={() => handleDelete(category.id)}
+          okText="Xóa"
+          cancelText="Hủy"
+          okButtonProps={{ danger: true }}
+        >
+          <Button type="link" icon={<DeleteOutlined />} danger size="small" />
+        </Popconfirm>
+      </div>
+    </div>
+  );
+
+  // Render child category item
+  const renderChildCategoryItem = (category: Category) => (
+    <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg mb-2 ml-8 border-l-2 border-gray-200 dark:border-gray-600 pl-4">
+      <div className="flex items-center space-x-3">
+        <div className="flex-shrink-0">
+          {category.image ? (
+            <Image
+              src={category.image}
+              alt={category.name}
+              width={32}
+              height={32}
+              style={{ objectFit: 'cover', borderRadius: 4 }}
+              fallback="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMIAAADDCAYAAADQvc6UAAABRWlDQ1BJQ0MgUHJvZmlsZQAAKJFjYGASSSwoyGFhYGDIzSspCnJ3UoiIjFJgf8LAwSDCIMogwMCcmFxc4BgQ4ANUwgCjUcG3awyMIPqyLsis7PPOq3QdDFcvjV3jOD1boQVTPQrgSkktTgbSf4A4LbmgqISBgTEFyFYuLykAsTuAbJEioKOA7DkgdjqEvQHEToKwj4DVhAQ5A9k3gGyB5IxEoBmML4BsnSQk8XQkNtReEOBxcfXxUQg1Mjc0dyHgXNJBSWpFCYh2zi+oLMpMzyhRcASGUqqCZ16yno6CkYGRAQMDKMwhqj/fAIcloxgHQqxAjIHBEugw5sUIsSQpBobtQPdLciLEVJYzMPBHMDBsayhILEqEO4DxG0txmrERhM29nYGBddr//5/DGRjYNRkY/l7////39v///y4Dmn+LgeHANwDrkl1AuO+pmgAAADhlWElmTU0AKgAAAAgAAYdpAAQAAAABAAAAGgAAAAAAAqACAAQAAAABAAAAwqADAAQAAAABAAAAwwAAAAD9b/HnAAAHlklEQVR4Ae3dP3Ik1RnG4W+FgYxN"
+            />
+          ) : (
+            <div className="w-8 h-8 bg-gray-100 rounded flex items-center justify-center">
+              <FolderOutlined className="text-gray-400 text-sm" />
+            </div>
+          )}
+        </div>
+        <div className="flex-1">
+          <div className="font-medium text-gray-900 dark:text-white">{category.name}</div>
+          <div className="text-sm text-gray-500">{category.slug}</div>
+          {category.description && (
+            <div className="text-sm text-gray-600 dark:text-gray-400 mt-1 max-w-md truncate" title={category.description}>
+              {category.description}
+            </div>
+          )}
+        </div>
+        <div className="flex items-center space-x-2">
+          <Tag color={category.isActive ? 'success' : 'error'}>
+            {category.isActive ? 'Hoạt động' : 'Ẩn'}
+          </Tag>
+          <span className="text-sm text-gray-500">Thứ tự: {category.sortOrder || 0}</span>
+        </div>
+      </div>
+      <div className="flex items-center space-x-2">
+        <Button
+          type="link"
+          icon={<EditOutlined />}
+          onClick={() => handleEdit(category)}
+          size="small"
+        />
+        <Popconfirm
+          title="Xóa danh mục"
+          description="Bạn có chắc chắn muốn xóa danh mục này?"
+          onConfirm={() => handleDelete(category.id)}
+          okText="Xóa"
+          cancelText="Hủy"
+          okButtonProps={{ danger: true }}
+        >
+          <Button type="link" icon={<DeleteOutlined />} danger size="small" />
+        </Popconfirm>
+      </div>
+    </div>
+  );
 
   return (
     <div className="p-2 sm:p-4 md:p-6">
@@ -278,24 +313,23 @@ const CategoriesPage: React.FC = () => {
           </Space>
         </div>
 
-        <div className="overflow-x-auto">
-          <Table
-            columns={columns}
-            dataSource={categories}
-            rowKey="id"
-            loading={isLoading}
-            scroll={{ x: 800 }}
-            className="dark-table-fixed-columns"
-            pagination={{
-              total: categories.length,
-              pageSize: 10,
-              showSizeChanger: true,
-              showQuickJumper: true,
-              responsive: true,
-              showTotal: (total, range) =>
-                `${range[0]}-${range[1]} của ${total} danh mục`,
-            }}
-          />
+        <div className="space-y-4">
+          {isLoading ? (
+            <div className="text-center py-8">Đang tải...</div>
+          ) : categoryTree.length === 0 ? (
+            <div className="text-center py-8 text-gray-500">Không có danh mục nào</div>
+          ) : (
+            categoryTree.map((category) => (
+              <div key={category.id}>
+                {renderCategoryItem(category)}
+                {category.children.map((child) => (
+                  <div key={child.id}>
+                    {renderChildCategoryItem(child)}
+                  </div>
+                ))}
+              </div>
+            ))
+          )}
         </div>
 
         <Modal
