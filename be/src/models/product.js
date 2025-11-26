@@ -10,6 +10,15 @@ const Product = sequelize.define(
       defaultValue: DataTypes.UUIDV4,
       primaryKey: true,
     },
+    brandId: {
+      type: DataTypes.UUID,
+      allowNull: true,
+      references: {
+        model: "brands",
+        key: "id",
+      },
+      field: "brand_id", // nếu bạn muốn DB column là brand_id
+    },
     name: {
       type: DataTypes.TEXT,
       allowNull: false,
@@ -232,5 +241,22 @@ const Product = sequelize.define(
     },
   }
 );
+// Sau cùng, trước module.exports
+Product.prototype.getDisplayPrice = function (variants = []) {
+  const price = parseFloat(this.price);
+  if (price > 0) return price.toFixed(2);
+
+  // Nếu price = 0, lấy giá từ variants
+  if (variants.length > 0) {
+    const prices = variants.map((v) => parseFloat(v.price));
+    const minPrice = Math.min(...prices);
+    const maxPrice = Math.max(...prices);
+    return minPrice === maxPrice
+      ? minPrice.toFixed(2)
+      : `${minPrice.toFixed(2)} - ${maxPrice.toFixed(2)}`;
+  }
+
+  return "Liên hệ"; // trường hợp không có variants
+};
 
 module.exports = Product;

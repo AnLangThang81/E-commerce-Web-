@@ -138,7 +138,7 @@ Rollback
   @@ -1241,15 +1241,23 @@
   // Get product IDs
   const productIds = bestSellers.map((product) => product.id);
-       // Get full product details
+  // Get full product details
 
 - const products = await Product.findAll({
 
