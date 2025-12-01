@@ -5,6 +5,7 @@ import Modal from '@/components/common/Modal';
 import Select from '@/components/common/Select';
 import { useCreateProductMutation } from '@/services/adminProductApi';
 import { useGetCategoriesQuery } from '@/services/categoryApi';
+import { getErrorMessage } from '@/utils/errorUtils';
 import {
   ArrowLeftIcon,
   ArrowRightIcon,
@@ -126,6 +127,7 @@ const CreateProductWizard: React.FC<CreateProductWizardProps> = ({
   const [attributes, setAttributes] = useState<Attribute[]>([]);
   const [variants, setVariants] = useState<Variant[]>([]);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [submissionError, setSubmissionError] = useState<string | null>(null);
 
   // Auto-fill SEO fields when name and description change
   useEffect(() => {
@@ -393,6 +395,7 @@ const CreateProductWizard: React.FC<CreateProductWizardProps> = ({
       setErrors({});
       setCurrentStep(0);
       setCompletedSteps({});
+      setSubmissionError(null);
 
       onSuccess?.();
       onClose();
@@ -406,6 +409,8 @@ const CreateProductWizard: React.FC<CreateProductWizardProps> = ({
         });
         setErrors(apiErrors);
       }
+      const errorMessage = getErrorMessage(error, 'en');
+      setSubmissionError(errorMessage);
     }
   };
 
@@ -1216,7 +1221,7 @@ const CreateProductWizard: React.FC<CreateProductWizardProps> = ({
               >
                 {isLoading ? (
                   <div className="flex items-center gap-2 relative z-10">
-                    <LoadingSpinner size="small" />
+                    <LoadingSpinner />
                     <span className="inline-block">Đang xử lý...</span>
                   </div>
                 ) : (
@@ -1232,6 +1237,11 @@ const CreateProductWizard: React.FC<CreateProductWizardProps> = ({
       }
     >
       <div className="overflow-y-auto max-h-[70vh]">
+        {submissionError && (
+          <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {submissionError}
+          </div>
+        )}
         {/* Progress bar */}
         <div className="mb-6">
           <div className="flex items-center justify-between mb-2">

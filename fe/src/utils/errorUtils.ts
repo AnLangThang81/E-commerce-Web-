@@ -8,6 +8,7 @@
  */
 export enum ErrorType {
   NETWORK_ERROR = 'NETWORK_ERROR',
+  TIMEOUT_ERROR = 'TIMEOUT_ERROR',
   VALIDATION_ERROR = 'VALIDATION_ERROR',
   AUTHENTICATION_ERROR = 'AUTHENTICATION_ERROR',
   AUTHORIZATION_ERROR = 'AUTHORIZATION_ERROR',
@@ -33,6 +34,10 @@ const ERROR_MESSAGES = {
   [ErrorType.NETWORK_ERROR]: {
     vi: 'Không thể kết nối tới server. Vui lòng kiểm tra kết nối internet.',
     en: 'Unable to connect to server. Please check your internet connection.',
+  },
+  [ErrorType.TIMEOUT_ERROR]: {
+    vi: 'Yêu cầu mất quá nhiều thời gian. Vui lòng thử lại hoặc kiểm tra kết nối.',
+    en: 'Request took too long. Please try again or check your connection.',
   },
   [ErrorType.VALIDATION_ERROR]: {
     vi: 'Dữ liệu không hợp lệ. Vui lòng kiểm tra lại thông tin.',
@@ -119,6 +124,15 @@ export const parseError = (error: any): AppError => {
       return {
         type: ErrorType.NETWORK_ERROR,
         message,
+        code: status,
+        details: error,
+      };
+    }
+
+    if (status === 'TIMEOUT_ERROR') {
+      return {
+        type: ErrorType.TIMEOUT_ERROR,
+        message: error.error || message,
         code: status,
         details: error,
       };

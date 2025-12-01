@@ -48,6 +48,7 @@ import {
   hasBase64Images,
   processDescriptionImages,
 } from '@/utils/descriptionImageProcessor';
+import { getErrorMessage } from '@/utils/errorUtils';
 
 const { Title, Text } = Typography;
 
@@ -412,40 +413,12 @@ const CreateProductPage: React.FC = () => {
         navigate('/admin/products');
       } catch (error: any) {
         console.error('Failed to create product:', error);
-        const errorMessage = formatErrorMessage(error);
+        const errorMessage = getErrorMessage(error, 'en');
         message.error(errorMessage);
       }
     },
     isSubmitting: isCreating,
   });
-
-  // Helper function to format error messages
-  const formatErrorMessage = (error: any): string => {
-    if (error?.data?.message) {
-      return error.data.message;
-    }
-
-    if (error?.data?.errors && error.data.errors.length > 0) {
-      if (error.data.errors.length === 1) {
-        return (
-          error.data.errors[0].message ||
-          `${error.data.errors[0].field}: Lỗi validation`
-        );
-      }
-
-      // Multiple errors - format nicely
-      const errorList = error.data.errors
-        .map((err: any) => err.message || `${err.field}: Lỗi validation`)
-        .join('\n• ');
-      return `Có ${error.data.errors.length} lỗi cần khắc phục:\n• ${errorList}`;
-    }
-
-    if (error?.message) {
-      return error.message;
-    }
-
-    return 'Tạo sản phẩm thất bại. Vui lòng thử lại.';
-  };
 
   const categories = categoriesResponse?.data || [];
 
@@ -696,7 +669,7 @@ const CreateProductPage: React.FC = () => {
       disabled: !isTabAccessible('images'),
       children: (
         <>
-          <ProductImagesForm />
+          <ProductImagesForm form={form} />
           <TabNavigation
             activeTab={activeTab}
             setActiveTab={setActiveTab}

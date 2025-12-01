@@ -81,11 +81,13 @@ const prepareHeaders = async (headers: Headers): Promise<Headers> => {
 
 /**
  * Base query for API requests
+ * Note: We don't set timeout here as we handle it in baseQueryWithAutoLogout
+ * to support per-request timeout configuration
  */
 const baseQuery = fetchBaseQuery({
   baseUrl: getBaseUrl(),
   prepareHeaders,
-  timeout: API_CONFIG.TIMEOUT,
+  // timeout is handled in baseQueryWithAutoLogout for per-request configuration
 });
 
 /**
@@ -109,30 +111,86 @@ const logApiError = (args: string | FetchArgs, error: any): void => {
 };
 
 /**
- * Enhanced base query with automatic logout on 401
+ * Extended FetchArgs type to support custom timeout
+ */
+interface ExtendedFetchArgs extends FetchArgs {
+  timeout?: number;
+}
+
+/**
+ * Enhanced base query with automatic logout on 401 and per-request timeout support
  */
 const baseQueryWithAutoLogout: BaseQueryFn<
-  string | FetchArgs,
+  string | FetchArgs | ExtendedFetchArgs,
   unknown,
   FetchBaseQueryError
 > = async (args, api, extraOptions) => {
   try {
-    const result = await baseQuery(args, api, extraOptions);
+    // Extract timeout from args if provided
+    let requestTimeout = API_CONFIG.TIMEOUT;
+    let fetchArgs: FetchArgs | string = args;
 
-    if (result.error) {
-      logApiError(args, result.error);
-
-      // Handle 401 errors
-      if (isUnauthorizedError(result.error)) {
-        const normalizedError = {
-          status: 401,
-          data: result.error?.data || result.error,
-        };
-        handleUnauthorizedError(normalizedError);
-      }
+    if (typeof args === "object" && args !== null && "timeout" in args) {
+      requestTimeout = (args as ExtendedFetchArgs).timeout as number;
+      // Remove timeout from args as fetchBaseQuery doesn't support it
+      const { timeout, ...restArgs } = args as ExtendedFetchArgs;
+      fetchArgs = restArgs as FetchArgs;
     }
 
-    return result;
+    // Always use AbortController for timeout handling (supports both default and custom timeouts)
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), requestTimeout);
+
+    try {
+      // Add signal to fetch args
+      const argsWithSignal: FetchArgs =
+        typeof fetchArgs === "string"
+          ? { url: fetchArgs, signal: controller.signal }
+          : { ...fetchArgs, signal: controller.signal };
+
+      const result = await baseQuery(argsWithSignal, api, extraOptions);
+      clearTimeout(timeoutId);
+
+      if (result.error) {
+        logApiError(fetchArgs, result.error);
+
+        // Handle timeout errors
+        if (
+          result.error.status === "TIMEOUT_ERROR" ||
+          (result.error.error &&
+            String(result.error.error).includes("aborted"))
+        ) {
+          return {
+            error: {
+              status: "TIMEOUT_ERROR",
+              error: `Request timeout after ${requestTimeout}ms`,
+            },
+          };
+        }
+
+        // Handle 401 errors
+        if (isUnauthorizedError(result.error)) {
+          const normalizedError = {
+            status: 401,
+            data: result.error?.data || result.error,
+          };
+          handleUnauthorizedError(normalizedError);
+        }
+      }
+
+      return result;
+    } catch (error: any) {
+      clearTimeout(timeoutId);
+      if (error.name === "AbortError" || controller.signal.aborted) {
+        return {
+          error: {
+            status: "TIMEOUT_ERROR",
+            error: `Request timeout after ${requestTimeout}ms`,
+          },
+        };
+      }
+      throw error;
+    }
   } catch (error) {
     console.error("💥 Unexpected API error:", error);
     return {

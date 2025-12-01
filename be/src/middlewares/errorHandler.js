@@ -65,11 +65,21 @@ const handleJWTExpiredError = () =>
 // Handle Sequelize unique constraint error
 const handleSequelizeUniqueConstraintError = (err) => {
   // Extract field name and value from the error
-  const field = err.errors[0]?.path;
-  const value = err.errors[0]?.value;
+  const field = err.errors?.[0]?.path || err.fields?.[0];
+  
+  // Check if it's the name field - return specific message
+  if (field === 'name' || (err.parent && err.parent.constraint?.includes('name'))) {
+    const error = new AppError('Tên sản phẩm đã tồn tại', 400);
+    error.status = 'error'; // Override status to 'error' instead of 'fail'
+    return error;
+  }
+  
+  // Generic message for other unique constraint violations
+  const value = err.errors?.[0]?.value;
   const message = `Giá trị '${value}' đã tồn tại cho trường '${field}'. Vui lòng sử dụng giá trị khác!`;
-
-  return new AppError(message, 400);
+  const error = new AppError(message, 400);
+  error.status = 'error';
+  return error;
 };
 
 // Main error handler middleware
@@ -77,7 +87,26 @@ const errorHandler = (err, req, res, next) => {
   err.statusCode = err.statusCode || 500;
   err.status = err.status || 'error';
 
+  // Handle Sequelize unique constraint error in both dev and prod
+  let isUniqueConstraintError = false;
+  if (err.name === 'SequelizeUniqueConstraintError') {
+    isUniqueConstraintError = true;
+    err = handleSequelizeUniqueConstraintError(err);
+  }
+
+  // Override status to 'error' for product name duplicate errors
+  if (err.message === 'Tên sản phẩm đã tồn tại') {
+    err.status = 'error';
+  }
+
   if (process.env.NODE_ENV === 'development') {
+    // For development, return clean error format for SequelizeUniqueConstraintError
+    if (isUniqueConstraintError || err.message === 'Tên sản phẩm đã tồn tại') {
+      return res.status(err.statusCode || 400).json({
+        status: 'error',
+        message: err.message,
+      });
+    }
     sendErrorDev(err, res);
   } else if (process.env.NODE_ENV === 'production') {
     let error = { ...err };
@@ -89,9 +118,6 @@ const errorHandler = (err, req, res, next) => {
       error = handleValidationErrorDB(error);
     if (error.name === 'JsonWebTokenError') error = handleJWTError();
     if (error.name === 'TokenExpiredError') error = handleJWTExpiredError();
-    // Handle Sequelize unique constraint error
-    if (error.name === 'SequelizeUniqueConstraintError')
-      error = handleSequelizeUniqueConstraintError(error);
 
     sendErrorProd(error, res);
   }

@@ -155,6 +155,8 @@ export const adminProductApi = api.injectEndpoints({
         url: `/admin/products/${id}`,
         method: 'PUT',
         body: productData,
+        // Increase timeout to 60 seconds for product updates (can be slow with many attributes/variants)
+        timeout: 60000,
       }),
       invalidatesTags: (result, error, { id }) => [
         { type: 'Product', id },

@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { useCreateProductMutation } from "@/services/adminProductApi";
 import { useGetCategoriesQuery } from "@/services/categoryApi";
+import { getErrorMessage } from "@/utils/errorUtils";
 
 // Kiểm tra xem một chuỗi có phải là URL hình ảnh hay không
 const isImageUrl = (url: string): boolean => {
@@ -582,7 +583,7 @@ const CreateProductWizardContent: React.FC<CreateProductWizardContentProps> = ({
       console.error("Failed to create product:", error);
 
       // Log chi tiết lỗi để debug
-      if (error.errorFields) {
+      if (error?.errorFields) {
         console.log("Validation error fields:", error.errorFields);
         // Hiển thị lỗi cụ thể từ trường đầu tiên bị lỗi
         if (error.errorFields.length > 0) {
@@ -611,8 +612,8 @@ const CreateProductWizardContent: React.FC<CreateProductWizardContentProps> = ({
         }
       }
 
-      // Nếu không phải lỗi validation, hiển thị thông báo chung
-      message.error("Tạo sản phẩm thất bại. Vui lòng thử lại.");
+      const errorMessage = getErrorMessage(error, "en");
+      message.error(errorMessage);
     }
   };
 

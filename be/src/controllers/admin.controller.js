@@ -217,7 +217,7 @@ const getDetailedStats = catchAsync(async (req, res) => {
       [
         Sequelize.fn('DATE_FORMAT', Sequelize.col('createdAt'), dateFormat),
         'ASC',
-      ],
+      ],  
     ],
   });
 
@@ -642,15 +642,15 @@ const createProduct = catchAsync(async (req, res) => {
         ) {
           try {
             // Tạm thời bỏ qua validation để đảm bảo biến thể được tạo
-            // const isValid = validateVariantAttributes(
-            //   productAttributes,
-            //   variantAttributes
-            // );
-            // if (!isValid) {
-            //   throw new Error(
-            //     `Thuộc tính biến thể không hợp lệ cho biến thể: ${variant.name}`
-            //   );
-            // }
+            const isValid = validateVariantAttributes(
+              productAttributes,
+              variantAttributes
+            );
+            if (!isValid) {
+              throw new Error(
+                `Thuộc tính biến thể không hợp lệ cho biến thể: ${variant.name}`
+              );
+            }
           } catch (error) {
             console.error('Lỗi khi xác thực thuộc tính biến thể:', error);
             // Không throw error, chỉ log để tiếp tục tạo biến thể
@@ -866,10 +866,16 @@ const updateProduct = catchAsync(async (req, res) => {
     req.body.hasOwnProperty('warrantyPackageIds')
   );
 
-  const product = await Product.findByPk(id);
-  if (!product) {
-    throw new AppError('Không tìm thấy sản phẩm', 404);
-  }
+  // Use transaction for data integrity and better performance
+  const { sequelize } = require('../models');
+  const transaction = await sequelize.transaction();
+
+  try {
+    const product = await Product.findByPk(id, { transaction });
+    if (!product) {
+      await transaction.rollback();
+      throw new AppError('Không tìm thấy sản phẩm', 404);
+    }
 
   // Track changes for audit
   const changes = {};
@@ -913,355 +919,416 @@ const updateProduct = catchAsync(async (req, res) => {
   if (req.body.hasOwnProperty('seoKeywords'))
     updateData.seoKeywords = seoKeywords;
 
-  // Cập nhật sản phẩm với dữ liệu mới
-  console.log('UpdateData before update:', updateData);
-  const updatedProduct = await product.update(updateData);
-
-  // Cập nhật compareAtPrice riêng bằng truy vấn SQL trực tiếp nếu có trong request
-  // Hỗ trợ cả compareAtPrice và comparePrice
-  if (
-    req.body.hasOwnProperty('compareAtPrice') ||
-    req.body.hasOwnProperty('comparePrice')
-  ) {
-    const { sequelize } = require('../models');
-    // Ưu tiên sử dụng compareAtPrice, nếu không có thì dùng comparePrice
-    const priceToCompare = req.body.hasOwnProperty('compareAtPrice')
-      ? compareAtPrice
-      : comparePrice;
-
-    await sequelize.query(
-      'UPDATE products SET compare_at_price = :compareAtPrice WHERE id = :id',
-      {
-        replacements: {
-          compareAtPrice: priceToCompare,
-          id: product.id,
-        },
-        type: sequelize.QueryTypes.UPDATE,
-      }
-    );
-
-    // Cập nhật lại giá trị trong đối tượng product để trả về cho client
-    updatedProduct.compareAtPrice = priceToCompare;
-
-    // Log thông tin để debug
-    console.log(
-      `Updated compareAtPrice to ${priceToCompare} for product ${product.id}`
-    );
-  }
-
-  // Cập nhật categories nếu có
-  if (categoryIds && Array.isArray(categoryIds) && categoryIds.length > 0) {
+    // Cập nhật sản phẩm với dữ liệu mới
+    console.log('UpdateData before update:', updateData);
+    let updatedProduct;
     try {
-      // Check if we need to create categories (for demo/development purposes)
-      // In production, you would typically validate against existing categories
-      const { Category } = require('../models');
-
-      // For each category ID, either find it or create a placeholder
-      const categoryPromises = categoryIds.map(async (catId) => {
-        // Try to find the category first
-        let category = await Category.findByPk(catId).catch(() => null);
-
-        // If category doesn't exist and the ID is a simple number (from mock data)
-        if (!category && /^\d+$/.test(catId)) {
-          // Create a placeholder category with this ID as part of the name
-          // This is just for development/demo purposes
-          category = await Category.create({
-            name: `Category ${catId}`,
-            slug: `category-${catId}`,
-            description: `Auto-created category from ID ${catId}`,
-            isActive: true,
-          });
+      updatedProduct = await product.update(updateData, { transaction });
+    } catch (error) {
+      await transaction.rollback();
+      // Handle PostgreSQL unique constraint errors for the name field
+      if (
+        error.name === 'SequelizeUniqueConstraintError' ||
+        (error.parent && error.parent.code === '23505') ||
+        (error.original && error.original.code === '23505')
+      ) {
+        // Check if it's the name field that has the constraint violation
+        const field = error.errors?.[0]?.path || error.fields?.[0];
+        if (field === 'name' || (error.parent && error.parent.constraint?.includes('name'))) {
+          throw new AppError('Tên sản phẩm đã tồn tại', 400);
         }
-
-        return category ? category.id : null;
-      });
-
-      const validCategoryIds = (await Promise.all(categoryPromises)).filter(
-        (id) => id !== null
-      );
-
-      if (validCategoryIds.length > 0) {
-        await product.setCategories(validCategoryIds);
-        changes.categories = validCategoryIds;
       }
-    } catch (error) {
-      console.error('Error handling categories:', error);
-      // Continue without categories if there's an error
+      // Re-throw other errors
+      throw error;
     }
-  }
 
-  // Xử lý attributes - chỉ khi request có chứa field 'attributes'
-  if (req.body.hasOwnProperty('attributes') && Array.isArray(attributes)) {
-    try {
-      console.log('Updating attributes:', attributes);
+    // Prepare parallel operations array
+    const parallelOperations = [];
 
-      // Xóa tất cả attributes cũ
-      await ProductAttribute.destroy({ where: { productId: id } });
+    // Cập nhật compareAtPrice riêng bằng truy vấn SQL trực tiếp nếu có trong request
+    // Hỗ trợ cả compareAtPrice và comparePrice
+    if (
+      req.body.hasOwnProperty('compareAtPrice') ||
+      req.body.hasOwnProperty('comparePrice')
+    ) {
+      // Ưu tiên sử dụng compareAtPrice, nếu không có thì dùng comparePrice
+      const priceToCompare = req.body.hasOwnProperty('compareAtPrice')
+        ? compareAtPrice
+        : comparePrice;
 
-      // Tạo attributes mới
-      if (attributes.length > 0) {
-        const attributePromises = attributes.map(async (attr) => {
-          // Xử lý giá trị thuộc tính: nếu là chuỗi có dấu phẩy, tách thành mảng
-          let attrValues = [];
-          if (typeof attr.value === 'string') {
-            // Tách chuỗi thành mảng dựa trên dấu phẩy và loại bỏ khoảng trắng
-            attrValues = attr.value
-              .split(',')
-              .map((v) => v.trim())
-              .filter((v) => v);
-          } else if (Array.isArray(attr.value)) {
-            attrValues = attr.value;
-          } else if (attr.value) {
-            // Nếu không phải chuỗi hoặc mảng nhưng có giá trị
-            attrValues = [String(attr.value)];
-          }
-
-          console.log(
-            `Creating attribute: ${attr.name} with values:`,
-            attrValues
-          );
-
-          return await ProductAttribute.create({
-            productId: id,
-            name: attr.name,
-            values: attrValues.length > 0 ? attrValues : ['Default'],
-          });
-        });
-        await Promise.all(attributePromises);
-        changes.attributes = attributes.length;
-      }
-    } catch (error) {
-      console.error('Error updating attributes:', error);
-      throw error; // Ném lỗi để transaction có thể rollback
-    }
-  }
-
-  // Xử lý variants - chỉ khi request có chứa field 'variants'
-  if (req.body.hasOwnProperty('variants') && Array.isArray(variants)) {
-    try {
-      // Xóa tất cả variants cũ
-      await ProductVariant.destroy({ where: { productId: id } });
-
-      // Tạo variants mới
-      let createdVariants = [];
-      if (variants.length > 0) {
-        // Lấy attributes để validate
-        const productAttributes = await ProductAttribute.findAll({
-          where: { productId: id },
-        });
-
-        const variantPromises = variants.map(async (variant) => {
-          // Đảm bảo variant.attributes luôn là một object
-          const variantAttributes = variant.attributes || {};
-
-          console.log(`Processing variant: ${variant.name}`, {
-            price: variant.price,
-            stock: variant.stock,
-            sku: variant.sku,
-            attributes: variantAttributes,
-          });
-
-          // Validate variant attributes - bỏ qua validation nếu không có thuộc tính
-          if (
-            productAttributes.length > 0 &&
-            Object.keys(variantAttributes).length > 0
-          ) {
-            try {
-              // Tạm thời bỏ qua validation để đảm bảo biến thể được tạo
-              // const isValid = validateVariantAttributes(
-              //   productAttributes,
-              //   variantAttributes
-              // );
-              // if (!isValid) {
-              //   throw new Error(
-              //     `Thuộc tính biến thể không hợp lệ cho biến thể: ${variant.name}`
-              //   );
-              // }
-            } catch (error) {
-              console.error('Lỗi khi xác thực thuộc tính biến thể:', error);
-              // Không throw error, chỉ log để tiếp tục tạo biến thể
-            }
-          }
-
-          // Generate SKU if not provided
-          const variantSku =
-            variant.sku ||
-            generateVariantSku(updatedProduct.sku, variantAttributes);
-
-          console.log(`Creating variant with SKU: ${variantSku}`);
-
-          return await ProductVariant.create({
-            productId: id,
-            name: variant.name,
-            sku: variantSku,
-            attributes: variantAttributes,
-            price: parseFloat(variant.price) || 0,
-            stockQuantity: parseInt(variant.stock) || 0,
-            images: variant.images || [],
-          });
-        });
-
-        createdVariants = await Promise.all(variantPromises);
-        changes.variants = variants.length;
-
-        // Update product total stock from variants
-        const totalStock = calculateTotalStock(createdVariants);
-        await Product.update(
+      parallelOperations.push(
+        sequelize.query(
+          'UPDATE products SET compare_at_price = :compareAtPrice WHERE id = :id',
           {
-            stockQuantity: totalStock,
-            inStock: totalStock > 0,
-          },
-          { where: { id } }
-        );
-      } else {
-        // If no variants, reset to product base stock
-        // Chỉ cập nhật nếu stockQuantity đã được gửi trong request
-        if (req.body.hasOwnProperty('stockQuantity')) {
+            replacements: {
+              compareAtPrice: priceToCompare,
+              id: product.id,
+            },
+            type: sequelize.QueryTypes.UPDATE,
+            transaction,
+          }
+        ).then(() => {
+          // Cập nhật lại giá trị trong đối tượng product để trả về cho client
+          updatedProduct.compareAtPrice = priceToCompare;
+          console.log(
+            `Updated compareAtPrice to ${priceToCompare} for product ${product.id}`
+          );
+        })
+      );
+    }
+
+    // Cập nhật categories nếu có - run in parallel with compareAtPrice
+    if (categoryIds && Array.isArray(categoryIds) && categoryIds.length > 0) {
+      parallelOperations.push(
+        (async () => {
+          try {
+            // Check if we need to create categories (for demo/development purposes)
+            // In production, you would typically validate against existing categories
+            const { Category } = require('../models');
+
+            // For each category ID, either find it or create a placeholder
+            const categoryPromises = categoryIds.map(async (catId) => {
+              // Try to find the category first
+              let category = await Category.findByPk(catId, { transaction }).catch(() => null);
+
+              // If category doesn't exist and the ID is a simple number (from mock data)
+              if (!category && /^\d+$/.test(catId)) {
+                // Create a placeholder category with this ID as part of the name
+                // This is just for development/demo purposes
+                category = await Category.create({
+                  name: `Category ${catId}`,
+                  slug: `category-${catId}`,
+                  description: `Auto-created category from ID ${catId}`,
+                  isActive: true,
+                }, { transaction });
+              }
+
+              return category ? category.id : null;
+            });
+
+            const validCategoryIds = (await Promise.all(categoryPromises)).filter(
+              (id) => id !== null
+            );
+
+            if (validCategoryIds.length > 0) {
+              await product.setCategories(validCategoryIds, { transaction });
+              changes.categories = validCategoryIds;
+            }
+          } catch (error) {
+            console.error('Error handling categories:', error);
+            // Continue without categories if there's an error
+          }
+        })()
+      );
+    }
+
+    // Execute parallel operations
+    await Promise.all(parallelOperations);
+
+    // Xử lý attributes - chỉ khi request có chứa field 'attributes'
+    if (req.body.hasOwnProperty('attributes') && Array.isArray(attributes)) {
+      try {
+        console.log('Updating attributes:', attributes);
+
+        // Xóa tất cả attributes cũ
+        await ProductAttribute.destroy({ where: { productId: id }, transaction });
+
+        // Tạo attributes mới - use bulkCreate for better performance
+        if (attributes.length > 0) {
+          const attributeData = attributes.map((attr) => {
+            // Xử lý giá trị thuộc tính: nếu là chuỗi có dấu phẩy, tách thành mảng
+            let attrValues = [];
+            if (typeof attr.value === 'string') {
+              // Tách chuỗi thành mảng dựa trên dấu phẩy và loại bỏ khoảng trắng
+              attrValues = attr.value
+                .split(',')
+                .map((v) => v.trim())
+                .filter((v) => v);
+            } else if (Array.isArray(attr.value)) {
+              attrValues = attr.value;
+            } else if (attr.value) {
+              // Nếu không phải chuỗi hoặc mảng nhưng có giá trị
+              attrValues = [String(attr.value)];
+            }
+
+            console.log(
+              `Creating attribute: ${attr.name} with values:`,
+              attrValues
+            );
+
+            return {
+              productId: id,
+              name: attr.name,
+              values: attrValues.length > 0 ? attrValues : ['Default'],
+            };
+          });
+
+          await ProductAttribute.bulkCreate(attributeData, { transaction });
+          changes.attributes = attributes.length;
+        }
+      } catch (error) {
+        await transaction.rollback();
+        console.error('Error updating attributes:', error);
+        throw error; // Ném lỗi để transaction có thể rollback
+      }
+    }
+
+    // Xử lý variants - chỉ khi request có chứa field 'variants'
+    if (req.body.hasOwnProperty('variants') && Array.isArray(variants)) {
+      try {
+        // Xóa tất cả variants cũ
+        await ProductVariant.destroy({ where: { productId: id }, transaction });
+
+        // Tạo variants mới
+        let createdVariants = [];
+        if (variants.length > 0) {
+          // Lấy attributes để validate
+          const productAttributes = await ProductAttribute.findAll({
+            where: { productId: id },
+            transaction,
+          });
+
+          const variantPromises = variants.map(async (variant) => {
+            // Đảm bảo variant.attributes luôn là một object
+            const variantAttributes = variant.attributes || {};
+
+            console.log(`Processing variant: ${variant.name}`, {
+              price: variant.price,
+              stock: variant.stock,
+              sku: variant.sku,
+              attributes: variantAttributes,
+            });
+
+            // Validate variant attributes - bỏ qua validation nếu không có thuộc tính
+            if (
+              productAttributes.length > 0 &&
+              Object.keys(variantAttributes).length > 0
+            ) {
+              try {
+                // Tạm thời bỏ qua validation để đảm bảo biến thể được tạo
+                // const isValid = validateVariantAttributes(
+                //   productAttributes,
+                //   variantAttributes
+                // );
+                // if (!isValid) {
+                //   throw new Error(
+                //     `Thuộc tính biến thể không hợp lệ cho biến thể: ${variant.name}`
+                //   );
+                // }
+              } catch (error) {
+                console.error('Lỗi khi xác thực thuộc tính biến thể:', error);
+                // Không throw error, chỉ log để tiếp tục tạo biến thể
+              }
+            }
+
+            // Generate SKU if not provided
+            const variantSku =
+              variant.sku ||
+              generateVariantSku(updatedProduct.sku, variantAttributes);
+
+            console.log(`Creating variant with SKU: ${variantSku}`);
+
+            return await ProductVariant.create({
+              productId: id,
+              name: variant.name,
+              sku: variantSku,
+              attributes: variantAttributes,
+              price: parseFloat(variant.price) || 0,
+              stockQuantity: parseInt(variant.stock) || 0,
+              images: variant.images || [],
+            }, { transaction });
+          });
+
+          createdVariants = await Promise.all(variantPromises);
+          changes.variants = variants.length;
+
+          // Update product total stock from variants
+          const totalStock = calculateTotalStock(createdVariants);
           await Product.update(
             {
-              stockQuantity: stockQuantity,
-              inStock: stockQuantity > 0,
+              stockQuantity: totalStock,
+              inStock: totalStock > 0,
             },
-            { where: { id } }
+            { where: { id }, transaction }
           );
+        } else {
+          // If no variants, reset to product base stock
+          // Chỉ cập nhật nếu stockQuantity đã được gửi trong request
+          if (req.body.hasOwnProperty('stockQuantity')) {
+            await Product.update(
+              {
+                stockQuantity: stockQuantity,
+                inStock: stockQuantity > 0,
+              },
+              { where: { id }, transaction }
+            );
+          }
         }
+      } catch (error) {
+        await transaction.rollback();
+        console.error('Error updating variants:', error);
+        throw error;
       }
-    } catch (error) {
-      console.error('Error updating variants:', error);
-      throw error;
     }
-  }
 
-  // Xử lý specifications - chỉ khi request có chứa field 'specifications'
-  if (
-    req.body.hasOwnProperty('specifications') &&
-    Array.isArray(specifications)
-  ) {
-    try {
-      console.log('Updating specifications:', specifications);
-      const { ProductSpecification } = require('../models');
+    // Prepare parallel operations for specifications and warranty packages
+    const independentOperations = [];
 
-      // Xóa tất cả specifications cũ
-      await ProductSpecification.destroy({ where: { productId: id } });
+    // Xử lý specifications - chỉ khi request có chứa field 'specifications'
+    if (
+      req.body.hasOwnProperty('specifications') &&
+      Array.isArray(specifications)
+    ) {
+      independentOperations.push(
+        (async () => {
+          try {
+            console.log('Updating specifications:', specifications);
+            const { ProductSpecification } = require('../models');
 
-      // Tạo specifications mới
-      if (specifications.length > 0) {
-        const specificationData = specifications.map((spec, index) => ({
-          productId: id,
-          name: spec.name,
-          value: spec.value,
-          category: spec.category || 'General',
-          sortOrder: spec.sortOrder || index,
-        }));
+            // Xóa tất cả specifications cũ
+            await ProductSpecification.destroy({ where: { productId: id }, transaction });
 
-        await ProductSpecification.bulkCreate(specificationData);
-        console.log(
-          `Updated ${specifications.length} specifications for product ${id}`
-        );
-        changes.specifications = specifications.length;
-      }
-    } catch (error) {
-      console.error('Error updating specifications:', error);
-      throw error;
-    }
-  }
-
-  // Xử lý warranty packages - chỉ khi request có chứa field 'warrantyPackageIds'
-  if (
-    req.body.hasOwnProperty('warrantyPackageIds') &&
-    Array.isArray(warrantyPackageIds)
-  ) {
-    try {
-      console.log('Updating warranty packages:', warrantyPackageIds);
-      const { ProductWarranty, WarrantyPackage } = require('../models');
-
-      // Xóa tất cả warranty packages cũ
-      await ProductWarranty.destroy({ where: { productId: id } });
-
-      // Tạo warranty packages mới
-      if (warrantyPackageIds.length > 0) {
-        // Kiểm tra xem các warranty packages có tồn tại không
-        console.log(
-          'Looking for warranty packages with IDs:',
-          warrantyPackageIds
-        );
-        const existingWarrantyPackages = await WarrantyPackage.findAll({
-          where: { id: warrantyPackageIds, isActive: true },
-        });
-        console.log(
-          'Found warranty packages:',
-          existingWarrantyPackages.length
-        );
-
-        if (existingWarrantyPackages.length > 0) {
-          const warrantyPromises = existingWarrantyPackages.map(
-            async (warrantyPackage, index) => {
-              return await ProductWarranty.create({
+            // Tạo specifications mới
+            if (specifications.length > 0) {
+              const specificationData = specifications.map((spec, index) => ({
                 productId: id,
-                warrantyPackageId: warrantyPackage.id,
-                isDefault: index === 0, // Đặt warranty package đầu tiên làm mặc định
-              });
+                name: spec.name,
+                value: spec.value,
+                category: spec.category || 'General',
+                sortOrder: spec.sortOrder || index,
+              }));
+
+              await ProductSpecification.bulkCreate(specificationData, { transaction });
+              console.log(
+                `Updated ${specifications.length} specifications for product ${id}`
+              );
+              changes.specifications = specifications.length;
             }
-          );
-
-          await Promise.all(warrantyPromises);
-          console.log(
-            `Created ${existingWarrantyPackages.length} warranty package associations for product ${id}`
-          );
-        }
-      }
-    } catch (error) {
-      console.error('Error updating warranty packages:', error);
-      // Continue without warranty packages if there's an error
+          } catch (error) {
+            console.error('Error updating specifications:', error);
+            throw error;
+          }
+        })()
+      );
     }
-  }
 
-  // Lấy lại product với attributes, variants và specifications
-  const productWithRelations = await Product.findByPk(id, {
-    include: [
-      {
-        model: Category,
-        as: 'categories',
-        through: { attributes: [] },
-      },
-      {
-        model: ProductAttribute,
-        as: 'attributes',
-      },
-      {
-        model: ProductVariant,
-        as: 'variants',
-      },
-      {
-        model: require('../models').ProductSpecification,
-        as: 'productSpecifications',
-      },
-      {
-        model: require('../models').WarrantyPackage,
-        as: 'warrantyPackages',
-        through: {
-          attributes: ['isDefault'],
-          as: 'productWarranty',
+    // Xử lý warranty packages - chỉ khi request có chứa field 'warrantyPackageIds'
+    if (
+      req.body.hasOwnProperty('warrantyPackageIds') &&
+      Array.isArray(warrantyPackageIds)
+    ) {
+      independentOperations.push(
+        (async () => {
+          try {
+            console.log('Updating warranty packages:', warrantyPackageIds);
+            const { ProductWarranty, WarrantyPackage } = require('../models');
+
+            // Xóa tất cả warranty packages cũ
+            await ProductWarranty.destroy({ where: { productId: id }, transaction });
+
+            // Tạo warranty packages mới
+            if (warrantyPackageIds.length > 0) {
+              // Kiểm tra xem các warranty packages có tồn tại không
+              console.log(
+                'Looking for warranty packages with IDs:',
+                warrantyPackageIds
+              );
+              const existingWarrantyPackages = await WarrantyPackage.findAll({
+                where: { id: warrantyPackageIds, isActive: true },
+                transaction,
+              });
+              console.log(
+                'Found warranty packages:',
+                existingWarrantyPackages.length
+              );
+
+              if (existingWarrantyPackages.length > 0) {
+                const warrantyData = existingWarrantyPackages.map(
+                  (warrantyPackage, index) => ({
+                    productId: id,
+                    warrantyPackageId: warrantyPackage.id,
+                    isDefault: index === 0, // Đặt warranty package đầu tiên làm mặc định
+                  })
+                );
+
+                await ProductWarranty.bulkCreate(warrantyData, { transaction });
+                console.log(
+                  `Created ${existingWarrantyPackages.length} warranty package associations for product ${id}`
+                );
+              }
+            }
+          } catch (error) {
+            console.error('Error updating warranty packages:', error);
+            // Continue without warranty packages if there's an error
+          }
+        })()
+      );
+    }
+
+    // Execute independent operations in parallel
+    await Promise.all(independentOperations);
+
+    // Commit transaction before final fetch (to avoid long transaction)
+    await transaction.commit();
+
+    // Lấy lại product với attributes, variants và specifications
+    const productWithRelations = await Product.findByPk(id, {
+      include: [
+        {
+          model: Category,
+          as: 'categories',
+          through: { attributes: [] },
         },
-        where: { isActive: true },
-        required: false,
-      },
-    ],
-  });
+        {
+          model: ProductAttribute,
+          as: 'attributes',
+        },
+        {
+          model: ProductVariant,
+          as: 'variants',
+        },
+        {
+          model: require('../models').ProductSpecification,
+          as: 'productSpecifications',
+        },
+        {
+          model: require('../models').WarrantyPackage,
+          as: 'warrantyPackages',
+          through: {
+            attributes: ['isDefault'],
+            as: 'productWarranty',
+          },
+          where: { isActive: true },
+          required: false,
+        },
+      ],
+    });
 
-  // Log audit
-  AdminAuditService.logProductAction(
-    req.user,
-    'UPDATE',
-    product.id,
-    product.name,
-    changes
-  );
+    // Log audit (non-blocking)
+    try {
+      AdminAuditService.logProductAction(
+        req.user,
+        'UPDATE',
+        product.id,
+        product.name,
+        changes
+      );
+    } catch (error) {
+      console.error('Error logging audit:', error);
+      // Don't fail the request if audit logging fails
+    }
 
-  res.status(200).json({
-    status: 'success',
-    data: { product: productWithRelations },
-  });
+    res.status(200).json({
+      status: 'success',
+      data: { product: productWithRelations },
+    });
+  } catch (error) {
+    // Rollback transaction on error
+    if (transaction && !transaction.finished) {
+      await transaction.rollback();
+    }
+    throw error;
+  }
 });
 
 /**

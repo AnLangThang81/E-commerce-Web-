@@ -35,6 +35,7 @@ import ProductCategoryForm from '../product/ProductCategoryForm';
 // Import services
 import { adminProductService } from '@/services/adminProductApi';
 import { attributeService } from '@/services/attributeService';
+import { getErrorMessage } from '@/utils/errorUtils';
 
 const { Step } = Steps;
 const { Title, Text, Paragraph } = Typography;
@@ -300,7 +301,8 @@ const DynamicProductCreateForm: React.FC<DynamicProductCreateFormProps> = ({
       }
     } catch (error: any) {
       console.error('Create product error:', error);
-      message.error(error.message || 'Có lỗi xảy ra khi tạo sản phẩm!');
+      const errorMessage = getErrorMessage(error, 'en');
+      message.error(errorMessage);
     } finally {
       setLoading(false);
     }

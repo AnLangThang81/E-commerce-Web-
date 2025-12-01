@@ -163,7 +163,7 @@ const ShopPage: React.FC = () => {
   const mapTreeToOptions = (categories: CategoryTree[]): FilterOption[] =>
     categories.map((category) => ({
       id: category.id,
-      name: `${category.name} (${category.productCount || 0})`,
+      name: `${category.name} `,
       ...(category.children.length
         ? { children: mapTreeToOptions(category.children) }
         : {}),

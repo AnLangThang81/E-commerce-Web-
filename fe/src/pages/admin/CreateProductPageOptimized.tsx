@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCreateProductMutation } from '@/services/adminProductApi';
 import { useGetCategoriesQuery } from '@/services/categoryApi';
+import { getErrorMessage } from '@/utils/errorUtils';
 import Button from '@/components/common/Button';
 import Input from '@/components/common/Input';
 import Select from '@/components/common/Select';
@@ -154,6 +155,7 @@ const CreateProductPageOptimized: React.FC = () => {
   const [currentStep, setCurrentStep] = useState(0);
   const [completedSteps, setCompletedSteps] = useState<Set<string>>(new Set());
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [globalError, setGlobalError] = useState<string | null>(null);
 
   const [formData, setFormData] = useState<ProductFormData>({
     name: '',
@@ -294,9 +296,12 @@ const CreateProductPageOptimized: React.FC = () => {
       };
 
       await createProduct(payload).unwrap();
+      setGlobalError(null);
       navigate('/admin/products');
     } catch (error) {
       console.error('Error creating product:', error);
+      const errorMessage = getErrorMessage(error, 'en');
+      setGlobalError(errorMessage);
     }
   };
 
@@ -1383,6 +1388,12 @@ const CreateProductPageOptimized: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {globalError && (
+        <div className="mb-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {globalError}
+        </div>
+      )}
 
       {/* Progress Steps */}
       <div className="mb-8">

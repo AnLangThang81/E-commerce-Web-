@@ -15,7 +15,7 @@ const HERO_SLIDES = [
   {
     id: 1,
     image:
-      'https://images.unsplash.com/photo-1441986300917-64674bd600d8?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=2340&q=80',
+      'https://images.unsplash.com/photo-1702390753019-e43a19d9371f?q=80&w=1170&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D',
     titleKey: 'homepage.hero.slides.shopping.title',
     subtitleKey: 'homepage.hero.slides.shopping.subtitle',
     badgeKey: 'homepage.hero.slides.shopping.badge',

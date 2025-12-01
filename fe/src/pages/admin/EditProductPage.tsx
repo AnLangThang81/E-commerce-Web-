@@ -38,6 +38,7 @@ import ProductSeoForm from "@/components/product/ProductSeoForm";
 import ProductSpecificationsForm from "@/components/product/ProductSpecificationsForm";
 import ValidationAlerts from "@/components/product/ValidationAlerts";
 import FormActions from "@/components/product/FormActions";
+import { getErrorMessage } from "@/utils/errorUtils";
 import AttributeModal from "@/components/modals/AttributeModal";
 import VariantModal from "@/components/modals/VariantModal";
 
@@ -298,7 +299,7 @@ const EditProductPage: React.FC = () => {
         navigate("/admin/products");
       } catch (error: any) {
         console.error("Failed to update product:", error);
-        const errorMessage = formatErrorMessage(error);
+        const errorMessage = getErrorMessage(error, "en");
         message.error(errorMessage);
       }
     },
@@ -478,34 +479,6 @@ const EditProductPage: React.FC = () => {
       }, 100);
     }
   }, [productResponse, form, setAttributes, setVariants, setIsFormValid]);
-
-  // Helper function to format error messages
-  const formatErrorMessage = (error: any): string => {
-    if (error?.data?.message) {
-      return error.data.message;
-    }
-
-    if (error?.data?.errors && error.data.errors.length > 0) {
-      if (error.data.errors.length === 1) {
-        return (
-          error.data.errors[0].message ||
-          `${error.data.errors[0].field}: Lỗi validation`
-        );
-      }
-
-      // Multiple errors - format nicely
-      const errorList = error.data.errors
-        .map((err: any) => err.message || `${err.field}: Lỗi validation`)
-        .join("\n• ");
-      return `Có ${error.data.errors.length} lỗi cần khắc phục:\n• ${errorList}`;
-    }
-
-    if (error?.message) {
-      return error.message;
-    }
-
-    return "Cập nhật sản phẩm thất bại. Vui lòng thử lại.";
-  };
 
   const categories = categoriesResponse?.data || [];
 

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useCreateProductMutation } from '@/services/adminProductApi';
 import { useGetCategoriesQuery } from '@/services/categoryApi';
+import { getErrorMessage } from '@/utils/errorUtils';
 import Button from '@/components/common/Button';
 import Input from '@/components/common/Input';
 import Select from '@/components/common/Select';
@@ -52,6 +53,7 @@ const CreateProductForm: React.FC<CreateProductFormProps> = ({
   const { data: categories, isLoading: isCategoriesLoading } =
     useGetCategoriesQuery();
   const [activeTab, setActiveTab] = useState('basic');
+  const [globalError, setGlobalError] = useState<string | null>(null);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -277,6 +279,7 @@ const CreateProductForm: React.FC<CreateProductFormProps> = ({
       setVariants([]);
       setErrors({});
       setActiveTab('basic');
+      setGlobalError(null);
 
       onSuccess?.();
       onClose();
@@ -290,6 +293,8 @@ const CreateProductForm: React.FC<CreateProductFormProps> = ({
         });
         setErrors(apiErrors);
       }
+      const errorMessage = getErrorMessage(error, 'en');
+      setGlobalError(errorMessage);
     }
   };
 
@@ -367,6 +372,11 @@ const CreateProductForm: React.FC<CreateProductFormProps> = ({
       }
     >
       <div className="overflow-y-auto max-h-[70vh]">
+        {globalError && (
+          <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {globalError}
+          </div>
+        )}
         {/* Tabs navigation */}
         <div className="flex overflow-x-auto mb-6 border-b border-gray-200 dark:border-gray-700 pb-1 gap-1">
           {tabs.map((tab) => (
